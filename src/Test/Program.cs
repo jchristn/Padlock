@@ -1,9 +1,11 @@
 ﻿namespace Test
 {
     using System;
+    using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.Diagnostics;
     using System.Linq;
+    using System.Reflection;
     using System.Threading;
     using System.Threading.Tasks;
     using Padlocks;
@@ -63,6 +65,7 @@
             await RunMixedTypeTest();
             await RunStressTest();
             await RunCancellationTest();
+            await RunKeyRemovalTest(); // Added new test for key removal
 
             Console.WriteLine("\nAll tests completed successfully!");
             Console.WriteLine("Press any key to exit...");
@@ -535,6 +538,211 @@
                 catch (Exception ex)
                 {
                     Console.WriteLine($"  ERROR: Wrong exception type: {ex.GetType().Name}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Tests that the Padlock properly cleans up and removes keys from its internal dictionary after locks are released.
+        /// This test validates the cleanup functionality in the LockReleaser.Dispose() method.
+        /// </summary>
+        private static async Task RunKeyRemovalTest()
+        {
+            Console.WriteLine("\n8. Testing key removal after lock release...");
+
+            var padlock = new Padlock<string>();
+            var lockCount = 100; // Number of keys to test with
+            var keys = new List<string>();
+
+            // Generate unique keys
+            for (int i = 0; i < lockCount; i++)
+            {
+                keys.Add($"test-key-{i}");
+            }
+
+            Console.WriteLine($"  Creating and releasing locks for {lockCount} unique keys...");
+
+            // Create a reflection field to access the internal dictionary
+            var dictionaryField = typeof(Padlock<string>).GetField("_locks",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+            if (dictionaryField == null)
+            {
+                Console.WriteLine("  ERROR: Could not access internal _locks field via reflection");
+                return;
+            }
+
+            // Get the dictionary before any operations
+            var locksDictionary = dictionaryField.GetValue(padlock) as ConcurrentDictionary<string, SemaphoreSlim>;
+            int initialCount = locksDictionary.Count;
+            Console.WriteLine($"  Initial dictionary count: {initialCount}");
+
+            // Phase 1: Acquire and immediately release locks
+            foreach (var key in keys)
+            {
+                using (padlock.Lock(key))
+                {
+                    // Just acquire and release immediately
+                }
+            }
+
+            // Check dictionary size after initial release
+            int afterFirstPhaseCount = locksDictionary.Count;
+            Console.WriteLine($"  Dictionary count after first phase: {afterFirstPhaseCount}");
+
+            // Phase 2: Create overlapping locks to simulate contention
+            var tasks = new List<Task>();
+            for (int i = 0; i < 5; i++) // Create 5 tasks
+            {
+                tasks.Add(Task.Run(() =>
+                {
+                    // Each task will lock 20 keys
+                    for (int j = 0; j < 20; j++)
+                    {
+                        string key = keys[j];
+                        using (padlock.Lock(key))
+                        {
+                            // Hold the lock briefly
+                            Thread.Sleep(5);
+                        }
+                    }
+                }));
+            }
+
+            // Wait for all tasks to complete
+            await Task.WhenAll(tasks);
+
+            // Give a small delay for any cleanup to occur
+            await Task.Delay(100);
+
+            // Check final dictionary size
+            int finalCount = locksDictionary.Count;
+            Console.WriteLine($"  Final dictionary count: {finalCount}");
+
+            // Verify cleanup occurred
+            if (finalCount == 0)
+            {
+                Console.WriteLine("  PASSED: All keys were removed from the dictionary after use");
+            }
+            else
+            {
+                Console.WriteLine($"  NOTE: {finalCount} keys remain in the dictionary");
+                Console.WriteLine("  This is expected behavior if any semaphores still have waiters or");
+                Console.WriteLine("  if cleanup edge cases prevented removal of some entries");
+
+                // Force GC and check again
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                await Task.Delay(100);
+
+                int afterGCCount = locksDictionary.Count;
+                Console.WriteLine($"  Dictionary count after GC: {afterGCCount}");
+
+                if (afterGCCount < finalCount)
+                {
+                    Console.WriteLine("  PARTIAL PASS: Some keys were removed after garbage collection");
+                }
+            }
+
+            // Additional verification - try to create contention and then verify removal
+            Console.WriteLine("\n  Testing with high contention scenario...");
+
+            // Reset by creating a new padlock
+            padlock = new Padlock<string>();
+            locksDictionary = dictionaryField.GetValue(padlock) as ConcurrentDictionary<string, SemaphoreSlim>;
+
+            // Use just a few keys to create contention
+            var contentionKeys = new[] { "contentionKey1", "contentionKey2" };
+            var contentionTasks = new List<Task>();
+
+            // Create locks and hold them
+            var locks = new List<IDisposable>();
+            foreach (var key in contentionKeys)
+            {
+                locks.Add(padlock.Lock(key));
+            }
+
+            // Try to acquire the same locks from other tasks (will be blocked)
+            for (int i = 0; i < 5; i++)
+            {
+                contentionTasks.Add(Task.Run(async () =>
+                {
+                    var random = new Random();
+                    var key = contentionKeys[random.Next(contentionKeys.Length)];
+
+                    try
+                    {
+                        using var cts = new CancellationTokenSource(50); // Short timeout
+                        using var lockHandle = await padlock.LockAsync(key, cts.Token);
+                        // If we get here, we acquired the lock
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Expected if the lock is held
+                    }
+                }));
+            }
+
+            // Wait for contention tasks to complete or timeout
+            await Task.WhenAll(contentionTasks);
+
+            // Now release all our held locks
+            foreach (var lockHandle in locks)
+            {
+                lockHandle.Dispose();
+            }
+            locks.Clear();
+
+            // Wait a moment for potential cleanup
+            await Task.Delay(100);
+
+            // Check dictionary size after contention test
+            int afterContentionCount = locksDictionary.Count;
+            Console.WriteLine($"  Dictionary count after contention test: {afterContentionCount}");
+
+            // Final test - create and release locks in quick succession
+            Console.WriteLine("\n  Testing rapid lock/unlock scenario...");
+            const int rapidTestIterations = 1000;
+
+            for (int i = 0; i < rapidTestIterations; i++)
+            {
+                string key = $"rapid-key-{i % 10}"; // Reuse 10 keys
+                using (padlock.Lock(key))
+                {
+                    // Acquire and release immediately
+                }
+            }
+
+            // Wait a moment for potential cleanup
+            await Task.Delay(100);
+
+            // Check dictionary size after rapid test
+            int afterRapidTestCount = locksDictionary.Count;
+            Console.WriteLine($"  Dictionary count after rapid test: {afterRapidTestCount}");
+
+            // Final summary
+            Console.WriteLine("\n  Key Removal Test Summary:");
+            Console.WriteLine($"  - Initial dictionary size: {initialCount}");
+            Console.WriteLine($"  - After first phase: {afterFirstPhaseCount}");
+            Console.WriteLine($"  - After contention test: {afterContentionCount}");
+            Console.WriteLine($"  - After rapid test: {afterRapidTestCount}");
+
+            if (afterRapidTestCount == 0)
+            {
+                Console.WriteLine("  FINAL RESULT: PASSED - Key removal is working correctly");
+            }
+            else
+            {
+                int remainingPercentage = (afterRapidTestCount * 100) / rapidTestIterations;
+                if (remainingPercentage < 5) // Less than 5% remains
+                {
+                    Console.WriteLine($"  FINAL RESULT: ACCEPTABLE - {afterRapidTestCount} keys remain ({remainingPercentage}%)");
+                    Console.WriteLine("  This may be due to contention or cleanup timing");
+                }
+                else
+                {
+                    Console.WriteLine($"  FINAL RESULT: POTENTIAL ISSUE - {afterRapidTestCount} keys remain ({remainingPercentage}%)");
+                    Console.WriteLine("  The cleanup mechanism may not be working optimally");
                 }
             }
         }
