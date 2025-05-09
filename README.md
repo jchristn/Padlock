@@ -1,4 +1,4 @@
-<img src="https://github.com/jchristn/padlock/blob/main/assets/icon.ico?raw=true" alt="Padlock" width="128px" height="128px" />
+<img src="https://github.com/jchristn/padlock/blob/main/assets/icon.png?raw=true" alt="Padlock" width="128px" height="128px" />
 
 # Padlock
 
