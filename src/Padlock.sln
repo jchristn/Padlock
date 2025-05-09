@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35527.113 d17.12
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Padlock", "Padlock\Padlock.csproj", "{81C48FF9-47FE-4DD9-9093-DC3155C06DC7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Test", "Test\Test.csproj", "{FFB65077-84BC-4746-8680-E70415FE284B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{81C48FF9-47FE-4DD9-9093-DC3155C06DC7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{81C48FF9-47FE-4DD9-9093-DC3155C06DC7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{81C48FF9-47FE-4DD9-9093-DC3155C06DC7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{81C48FF9-47FE-4DD9-9093-DC3155C06DC7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FFB65077-84BC-4746-8680-E70415FE284B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FFB65077-84BC-4746-8680-E70415FE284B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FFB65077-84BC-4746-8680-E70415FE284B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FFB65077-84BC-4746-8680-E70415FE284B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

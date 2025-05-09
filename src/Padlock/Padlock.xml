@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Padlock</name>
+    </assembly>
+    <members>
+        <member name="T:Padlocks.Padlock`1">
+            <summary>
+            Padlock is a lightweight, high-performance library that provides key-based locking for multithreaded applications. 
+            It enables granular locking on specific resources identified by keys of any type, allowing for efficient concurrency control without unnecessary blocking.
+            </summary>
+            <typeparam name="T">Type of key.</typeparam>
+        </member>
+        <member name="M:Padlocks.Padlock`1.#ctor">
+            <summary>
+            Padlock is a lightweight, high-performance library that provides key-based locking for multithreaded applications. 
+            It enables granular locking on specific resources identified by keys of any type, allowing for efficient concurrency control without unnecessary blocking.
+            </summary>
+        </member>
+        <member name="M:Padlocks.Padlock`1.Lock(`0)">
+            <summary>
+            Acquires a lock for the specified key. Returns a disposable handle that will release the lock when disposed.
+            </summary>
+            <param name="key">The key on which to lock.</param>
+            <returns>A disposable object that releases the lock when disposed.</returns>
+        </member>
+        <member name="M:Padlocks.Padlock`1.LockAsync(`0,System.Threading.CancellationToken)">
+            <summary>
+            Asynchronously acquires a lock for the specified key.
+            </summary>
+            <param name="key">The key on which to lock.</param>
+            <param name="cancellationToken">Optional cancellation token.</param>
+            <returns>A disposable object that releases the lock when disposed.</returns>
+        </member>
+        <member name="M:Padlocks.Padlock`1.IsLocked(`0)">
+            <summary>
+            Checks if a key is currently locked.
+            </summary>
+            <param name="key">The key to check.</param>
+            <returns>True if locked, false otherwise.</returns>
+        </member>
+    </members>
+</doc>
