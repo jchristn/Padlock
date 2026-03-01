@@ -16,6 +16,10 @@ Core features:
 - Cancellation support via standard CancellationToken
 - Simple, intuitive API with IDisposable pattern for lock release
 
+## Special Thanks
+
+Special thanks to @MarkCiliaVincenti for his help on this repo.  He has a similar yet more robust library in [AsyncKeyedLock](https://github.com/MarkCiliaVincenti/AsyncKeyedLock) that I encourage you to consider.
+
 ## Simple Example
 
 ```csharp

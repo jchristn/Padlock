@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFrameworks>netstandard2.0;netstandard2.1;net6.0;net8.0</TargetFrameworks>
+		<TargetFrameworks>netstandard2.0;netstandard2.1;net8.0;net10.0</TargetFrameworks>
 		<ApplicationIcon>icon.ico</ApplicationIcon>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 		<DocumentationFile>Padlock.xml</DocumentationFile>
@@ -9,7 +9,7 @@
 		<Title>Padlock is a lightweight, high-performance library that provides key-based locking for multithreaded applications.</Title>
 		<Authors>Joel Christner</Authors>
 		<Description>Padlock is a lightweight, high-performance library that provides key-based locking for multithreaded applications.</Description>
-		<Copyright>(c)2025</Copyright>
+		<Copyright>(c)2026</Copyright>
 		<PackageProjectUrl>https://github.com/jchristn/padlock</PackageProjectUrl>
 		<PackageIcon>icon.png</PackageIcon>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
@@ -17,7 +17,8 @@
 		<RepositoryType>git</RepositoryType>
 		<PackageTags>lock locks semaphore semaphoreslim async key</PackageTags>
 		<PackageReleaseNotes>Initial release</PackageReleaseNotes>
-		<AssemblyVersion>1.0.0</AssemblyVersion>
+		<AssemblyVersion>1.0.1</AssemblyVersion>
+		<Version>1.0.1</Version>
 		<PackageLicenseFile>LICENSE.md</PackageLicenseFile>
 		<IncludeSymbols>True</IncludeSymbols>
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>

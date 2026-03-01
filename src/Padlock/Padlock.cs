@@ -1,4 +1,4 @@
-﻿namespace Padlocks
+namespace Padlocks
 {
     using System;
     using System.Collections.Concurrent;
@@ -6,16 +6,16 @@
     using System.Threading.Tasks;
 
     /// <summary>
-    /// Padlock is a lightweight, high-performance library that provides key-based locking for multithreaded applications. 
+    /// Padlock is a lightweight, high-performance library that provides key-based locking for multithreaded applications.
     /// It enables granular locking on specific resources identified by keys of any type, allowing for efficient concurrency control without unnecessary blocking.
     /// </summary>
     /// <typeparam name="T">Type of key.</typeparam>
     public class Padlock<T>
     {
-        private readonly ConcurrentDictionary<T, SemaphoreSlim> _locks = new ConcurrentDictionary<T, SemaphoreSlim>();
+        private readonly ConcurrentDictionary<T, LockEntry> _locks = new ConcurrentDictionary<T, LockEntry>();
 
         /// <summary>
-        /// Padlock is a lightweight, high-performance library that provides key-based locking for multithreaded applications. 
+        /// Padlock is a lightweight, high-performance library that provides key-based locking for multithreaded applications.
         /// It enables granular locking on specific resources identified by keys of any type, allowing for efficient concurrency control without unnecessary blocking.
         /// </summary>
         public Padlock()
@@ -29,9 +29,9 @@
         /// <returns>A disposable object that releases the lock when disposed.</returns>
         public IDisposable Lock(T key)
         {
-            var semaphore = _locks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
-            semaphore.Wait();
-            return new LockReleaser(semaphore, key, _locks);
+            var entry = AcquireEntry(key);
+            entry.Semaphore.Wait();
+            return new LockReleaser(entry, key, _locks);
         }
 
         /// <summary>
@@ -42,9 +42,17 @@
         /// <returns>A disposable object that releases the lock when disposed.</returns>
         public async Task<IDisposable> LockAsync(T key, CancellationToken cancellationToken = default)
         {
-            var semaphore = _locks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
-            await semaphore.WaitAsync(cancellationToken);
-            return new LockReleaser(semaphore, key, _locks);
+            var entry = AcquireEntry(key);
+            try
+            {
+                await entry.Semaphore.WaitAsync(cancellationToken);
+            }
+            catch
+            {
+                ReleaseEntry(entry, key, _locks);
+                throw;
+            }
+            return new LockReleaser(entry, key, _locks);
         }
 
         /// <summary>
@@ -54,42 +62,66 @@
         /// <returns>True if locked, false otherwise.</returns>
         public bool IsLocked(T key)
         {
-            if (_locks.TryGetValue(key, out var semaphore))
+            if (_locks.TryGetValue(key, out var entry))
             {
-                return semaphore.CurrentCount == 0;
+                return entry.Semaphore.CurrentCount == 0;
             }
             return false; // No lock exists for this key
         }
 
+        private LockEntry AcquireEntry(T key)
+        {
+            while (true)
+            {
+                var entry = _locks.GetOrAdd(key, _ => new LockEntry());
+                int oldCount = Interlocked.Increment(ref entry.RefCount) - 1;
+                if (oldCount >= 0)
+                    return entry;
+
+                // Entry is being removed (RefCount was negative sentinel), undo and retry
+                Interlocked.Decrement(ref entry.RefCount);
+            }
+        }
+
+        private static void ReleaseEntry(LockEntry entry, T key, ConcurrentDictionary<T, LockEntry> locks)
+        {
+            if (Interlocked.Decrement(ref entry.RefCount) == 0)
+            {
+                // Try to mark as removing by transitioning from 0 to MinValue
+                if (Interlocked.CompareExchange(ref entry.RefCount, int.MinValue, 0) == 0)
+                {
+                    locks.TryRemove(key, out _);
+                    entry.Semaphore.Dispose();
+                }
+            }
+        }
+
+        internal sealed class LockEntry
+        {
+            public readonly SemaphoreSlim Semaphore = new SemaphoreSlim(1, 1);
+            public int RefCount;
+        }
+
         private sealed class LockReleaser : IDisposable
         {
-            private readonly SemaphoreSlim _semaphore;
+            private readonly LockEntry _entry;
             private readonly T _key;
-            private readonly ConcurrentDictionary<T, SemaphoreSlim> _lockDictionary;
+            private readonly ConcurrentDictionary<T, LockEntry> _lockDictionary;
             private int _disposed = 0;
 
-            public LockReleaser(SemaphoreSlim semaphore, T key, ConcurrentDictionary<T, SemaphoreSlim> lockDictionary)
+            public LockReleaser(LockEntry entry, T key, ConcurrentDictionary<T, LockEntry> lockDictionary)
             {
-                _semaphore = semaphore;
+                _entry = entry;
                 _key = key;
                 _lockDictionary = lockDictionary;
             }
 
             public void Dispose()
             {
-                // Only dispose once
                 if (Interlocked.Exchange(ref _disposed, 1) == 0)
                 {
-                    _semaphore.Release();
-
-                    // Optional cleanup: if no one is waiting on this semaphore, remove it
-                    if (_semaphore.CurrentCount == 1 && _semaphore.Wait(0))
-                    {
-                        // If we could immediately acquire the lock again, no one else is waiting
-                        // Try to remove from dictionary (only if the entry matches our semaphore)
-                        _lockDictionary.TryRemove(_key, out _);
-                        _semaphore.Release(); 
-                    }
+                    _entry.Semaphore.Release();
+                    ReleaseEntry(_entry, _key, _lockDictionary);
                 }
             }
         }

@@ -6,14 +6,14 @@
     <members>
         <member name="T:Padlocks.Padlock`1">
             <summary>
-            Padlock is a lightweight, high-performance library that provides key-based locking for multithreaded applications. 
+            Padlock is a lightweight, high-performance library that provides key-based locking for multithreaded applications.
             It enables granular locking on specific resources identified by keys of any type, allowing for efficient concurrency control without unnecessary blocking.
             </summary>
             <typeparam name="T">Type of key.</typeparam>
         </member>
         <member name="M:Padlocks.Padlock`1.#ctor">
             <summary>
-            Padlock is a lightweight, high-performance library that provides key-based locking for multithreaded applications. 
+            Padlock is a lightweight, high-performance library that provides key-based locking for multithreaded applications.
             It enables granular locking on specific resources identified by keys of any type, allowing for efficient concurrency control without unnecessary blocking.
             </summary>
         </member>

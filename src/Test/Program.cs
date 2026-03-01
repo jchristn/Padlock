@@ -30,13 +30,13 @@
                 Id = id;
             }
 
-            public bool Equals(CustomKey other)
+            public bool Equals(CustomKey? other)
             {
                 if (other is null) return false;
                 return Name == other.Name && Id == other.Id;
             }
 
-            public override bool Equals(object obj)
+            public override bool Equals(object? obj)
             {
                 return obj is CustomKey key && Equals(key);
             }
@@ -573,7 +573,7 @@
             }
 
             // Get the dictionary before any operations
-            var locksDictionary = dictionaryField.GetValue(padlock) as ConcurrentDictionary<string, SemaphoreSlim>;
+            var locksDictionary = dictionaryField.GetValue(padlock) as System.Collections.IDictionary ?? throw new InvalidOperationException("Could not access _locks dictionary");
             int initialCount = locksDictionary.Count;
             Console.WriteLine($"  Initial dictionary count: {initialCount}");
 
@@ -649,7 +649,7 @@
 
             // Reset by creating a new padlock
             padlock = new Padlock<string>();
-            locksDictionary = dictionaryField.GetValue(padlock) as ConcurrentDictionary<string, SemaphoreSlim>;
+            locksDictionary = dictionaryField.GetValue(padlock) as System.Collections.IDictionary ?? throw new InvalidOperationException("Could not access _locks dictionary");
 
             // Use just a few keys to create contention
             var contentionKeys = new[] { "contentionKey1", "contentionKey2" };
