@@ -16,9 +16,9 @@
 		<RepositoryUrl>https://github.com/jchristn/padlock</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<PackageTags>lock locks semaphore semaphoreslim async key</PackageTags>
-		<PackageReleaseNotes>v1.0.2 - Monitor-based race condition fix, configurable concurrency, object pooling, ValueTask returns</PackageReleaseNotes>
-		<AssemblyVersion>1.0.3</AssemblyVersion>
-		<Version>1.0.3</Version>
+		<PackageReleaseNotes>v1.0.4 - Monitor-based race condition fix, configurable concurrency, object pooling, ValueTask returns</PackageReleaseNotes>
+		<AssemblyVersion>1.0.4</AssemblyVersion>
+		<Version>1.0.4</Version>
 		<PackageLicenseFile>LICENSE.md</PackageLicenseFile>
 		<IncludeSymbols>True</IncludeSymbols>
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
