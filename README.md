@@ -3,7 +3,7 @@
 # Padlock
 
 [![NuGet Version](https://img.shields.io/nuget/v/Padlock.svg?style=flat)](https://www.nuget.org/packages/Padlock/) [![NuGet](https://img.shields.io/nuget/dt/Padlock.svg)](https://www.nuget.org/packages/Padlock)
- 
+
 ## Description
 
 Padlock is a lightweight, high-performance library that provides key-based locking for multithreaded applications. It enables granular locking on specific resources identified by keys of any type, allowing for efficient concurrency control without unnecessary blocking.
@@ -12,13 +12,23 @@ Core features:
 
 - Create locks based on any key type (string, int, GUID, custom objects, etc.)
 - Support for both synchronous and asynchronous locking patterns
+- Configurable concurrency per key (exclusive or shared locks)
+- Object pooling for reduced allocations under high throughput
+- ValueTask-based async API for reduced overhead
 - Efficient memory usage with automatic resource cleanup
 - Cancellation support via standard CancellationToken
 - Simple, intuitive API with IDisposable pattern for lock release
 
 ## Special Thanks
 
-Special thanks to @MarkCiliaVincenti for his help on this repo.  He has a similar yet more robust library in [AsyncKeyedLock](https://github.com/MarkCiliaVincenti/AsyncKeyedLock) that I encourage you to consider.
+Special thanks to @MarkCiliaVincenti for his help on this repo.  His open source contributions have helped make this library better.  He has a similar yet more robust and battle-tested library in [AsyncKeyedLock](https://github.com/MarkCiliaVincenti/AsyncKeyedLock) that I encourage you to consider.
+
+## Constructor Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `maxCount` | `int` | `1` | Maximum number of concurrent holders for each key. Use `1` for exclusive locking, or a higher value for shared/throttled access. |
+| `poolSize` | `int` | `20` | Maximum number of pooled lock entries kept for reuse. Reduces allocations in high-throughput scenarios. |
 
 ## Simple Example
 
@@ -28,7 +38,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Padlocks;
 
-var padlock = new Padlock<string>(); // using string keys
+Padlock<string> padlock = new Padlock<string>(); // using string keys
 
 using (padlock.Lock("resource1")) // synchronous
 {
@@ -43,7 +53,7 @@ await Task.Run(async () => // asynchronous
     }
 });
 
-var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 try
 {
     using (await padlock.LockAsync("resource3", cts.Token))
@@ -60,7 +70,44 @@ bool isLocked = padlock.IsLocked("resource1");
 Console.WriteLine($"Resource 1 is {(isLocked ? "locked" : "available")}");
 ```
 
-Padlock supports mixing both synchronous and asynchronous lock operations on the same resource:
+Padlock supports mixing both synchronous and asynchronous lock operations on the same resource.
+
+## Configurable Concurrency
+
+Use `maxCount` to allow multiple concurrent holders per key:
+
+```csharp
+// Allow up to 3 concurrent holders per key
+Padlock<string> padlock = new Padlock<string>(maxCount: 3);
+
+// All three of these can proceed concurrently for the same key
+Task task1 = Task.Run(async () =>
+{
+    using (await padlock.LockAsync("resource"))
+    {
+        // Work with resource concurrently (up to 3 at a time)
+        await Task.Delay(1000);
+    }
+});
+
+Task task2 = Task.Run(async () =>
+{
+    using (await padlock.LockAsync("resource"))
+    {
+        await Task.Delay(1000);
+    }
+});
+
+Task task3 = Task.Run(async () =>
+{
+    using (await padlock.LockAsync("resource"))
+    {
+        await Task.Delay(1000);
+    }
+});
+
+await Task.WhenAll(task1, task2, task3);
+```
 
 ## Lock With Custom Types
 
@@ -96,8 +143,8 @@ public class ResourceKey : IEquatable<ResourceKey>
     }
 }
 
-var padlock = new Padlock<ResourceKey>();
-var resourceKey = new ResourceKey("UserProfile", 42);
+Padlock<ResourceKey> padlock = new Padlock<ResourceKey>();
+ResourceKey resourceKey = new ResourceKey("UserProfile", 42);
 
 using (padlock.Lock(resourceKey))
 {
@@ -110,6 +157,8 @@ using (padlock.Lock(resourceKey))
 Padlock is designed for high performance with minimal overhead:
 
 - Uses `SemaphoreSlim` for efficient lock management
+- Object pooling reduces allocations in high-throughput scenarios
+- Monitor-based coordination for race-free cleanup
 - Automatically cleans up unused lock objects to reduce memory usage
 - Avoids unnecessary blocking when possible
 - Handles high-contention scenarios gracefully

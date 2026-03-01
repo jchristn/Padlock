@@ -11,11 +11,12 @@
             </summary>
             <typeparam name="T">Type of key.</typeparam>
         </member>
-        <member name="M:Padlocks.Padlock`1.#ctor">
+        <member name="M:Padlocks.Padlock`1.#ctor(System.Int32,System.Int32)">
             <summary>
-            Padlock is a lightweight, high-performance library that provides key-based locking for multithreaded applications.
-            It enables granular locking on specific resources identified by keys of any type, allowing for efficient concurrency control without unnecessary blocking.
+            Initializes a new instance of the <see cref="T:Padlocks.Padlock`1"/> class with configurable concurrency and pooling.
             </summary>
+            <param name="maxCount">Maximum number of concurrent holders for each key. Default is 1 (exclusive lock).</param>
+            <param name="poolSize">Maximum number of pooled lock entries for reuse. Default is 20.</param>
         </member>
         <member name="M:Padlocks.Padlock`1.Lock(`0)">
             <summary>
@@ -38,6 +39,46 @@
             </summary>
             <param name="key">The key to check.</param>
             <returns>True if locked, false otherwise.</returns>
+        </member>
+        <member name="F:Padlocks.Padlock`1.LockEntry.Semaphore">
+            <summary>
+            The semaphore used to control concurrent access.
+            </summary>
+        </member>
+        <member name="F:Padlocks.Padlock`1.LockEntry.RefCount">
+            <summary>
+            The number of active references to this entry.
+            </summary>
+        </member>
+        <member name="F:Padlocks.Padlock`1.LockEntry.IsRemoved">
+            <summary>
+            Indicates whether this entry has been removed from the dictionary.
+            </summary>
+        </member>
+        <member name="M:Padlocks.Padlock`1.LockEntry.#ctor(System.Int32)">
+            <summary>
+            Creates a new lock entry with the specified max concurrency count.
+            </summary>
+            <param name="maxCount">Maximum number of concurrent holders.</param>
+        </member>
+        <member name="M:Padlocks.Padlock`1.LockEntry.Reset(System.Int32)">
+            <summary>
+            Resets this entry for reuse from the pool.
+            </summary>
+            <param name="maxCount">Maximum number of concurrent holders.</param>
+        </member>
+        <member name="M:Padlocks.Padlock`1.LockReleaser.#ctor(Padlocks.Padlock{`0},Padlocks.Padlock{`0}.LockEntry,`0)">
+            <summary>
+            Creates a new lock releaser.
+            </summary>
+            <param name="padlock">The owning padlock instance.</param>
+            <param name="entry">The lock entry to release.</param>
+            <param name="key">The key associated with this lock.</param>
+        </member>
+        <member name="M:Padlocks.Padlock`1.LockReleaser.Dispose">
+            <summary>
+            Releases the lock.
+            </summary>
         </member>
     </members>
 </doc>
