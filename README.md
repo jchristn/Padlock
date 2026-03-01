@@ -21,7 +21,7 @@ Core features:
 
 ## Special Thanks
 
-Special thanks to @MarkCiliaVincenti for his help on this repo.  His open source contributions have helped make this library better.  He has a similar yet more robust and battle-tested library in [AsyncKeyedLock](https://github.com/MarkCiliaVincenti/AsyncKeyedLock) that I encourage you to consider.
+Special thanks to @MarkCiliaVincenti for his help on this repo.  His open source contributions have helped make this library better.  He has a similar yet more robust and battle-tested library in [AsyncKeyedLock](https://github.com/MarkCiliaVincenti/AsyncKeyedLock) which also offers striped locking, "lock-or-null" patterns, conditional locking, and more.
 
 ## Constructor Parameters
 
