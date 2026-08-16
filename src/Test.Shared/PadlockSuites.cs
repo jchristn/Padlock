@@ -40,7 +40,9 @@ namespace Test.Shared
 					Case(suiteId, "ReusableAfterRelease", "Reuses a key after sync and async release", ReusableAfterReleaseAsync),
 					Case(suiteId, "ConstructorValidation", "Rejects invalid constructor values", ConstructorValidationAsync),
 					Case(suiteId, "UnknownKeyIsNotLocked", "Reports unknown keys as unlocked", UnknownKeyIsNotLockedAsync),
-					Case(suiteId, "LockAcquisitionSmoke", "Acquires and releases a hot key repeatedly", LockAcquisitionSmokeAsync)
+					Case(suiteId, "LockAcquisitionSmoke", "Acquires and releases a hot key repeatedly", LockAcquisitionSmokeAsync),
+					Case(suiteId, "DefaultValueTypeKeys", "Treats default value-type keys as valid, distinct keys", DefaultValueTypeKeysAsync),
+					Case(suiteId, "SeparateInstancesIndependent", "Isolates lock state between separate Padlock instances", SeparateInstancesIndependentAsync)
 				});
 		}
 
@@ -71,7 +73,8 @@ namespace Test.Shared
 					Case(suiteId, "AlreadyCanceledTokenCleanup", "Cleans up immediately canceled async acquisition", AlreadyCanceledTokenCleanupAsync),
 					Case(suiteId, "DisposeUnderContention", "Releases queued waiters when a holder is disposed", DisposeUnderContentionAsync),
 					Case(suiteId, "AcquireReleaseStormNoLeaks", "Leaves no lock entries after a mixed acquire/release storm", AcquireReleaseStormNoLeaksAsync),
-					Case(suiteId, "MultiTypeStress", "Handles mixed key types under load", MultiTypeStressAsync)
+					Case(suiteId, "MultiTypeStress", "Handles mixed key types under load", MultiTypeStressAsync),
+					Case(suiteId, "MaxCountSyncWaiterBlocks", "Blocks a synchronous maxCount waiter until a slot frees", MaxCountSyncWaiterBlocksAsync)
 				});
 		}
 
@@ -343,6 +346,55 @@ namespace Test.Shared
 
 			await Task.WhenAll(tasks);
 			AssertEqual((long)taskCount * iterations, operations, "Hot-key acquisition smoke test lost updates.");
+		}
+
+		private static async Task DefaultValueTypeKeysAsync(CancellationToken cancellationToken)
+		{
+			// Value-type keys can never be null, so the default value (0, Guid.Empty)
+			// must behave as an ordinary, valid key rather than being rejected.
+			Padlock<int> intLock = new Padlock<int>();
+			AssertFalse(intLock.IsLocked(0), "Default int key should start unlocked.");
+
+			using (intLock.Lock(0))
+			{
+				AssertTrue(intLock.IsLocked(0), "Default int key should be locked while held.");
+				AssertFalse(intLock.IsLocked(1), "Locking key 0 should not lock an unrelated key.");
+			}
+
+			AssertFalse(intLock.IsLocked(0), "Default int key should be unlocked after release.");
+			AssertEqual(0, GetLockDictionaryCount(intLock), "Default int key entry should be removed after release.");
+
+			Padlock<Guid> guidLock = new Padlock<Guid>();
+			AssertFalse(guidLock.IsLocked(Guid.Empty), "Empty GUID key should start unlocked.");
+
+			using (await guidLock.LockAsync(Guid.Empty, cancellationToken))
+			{
+				AssertTrue(guidLock.IsLocked(Guid.Empty), "Empty GUID key should be locked while held.");
+			}
+
+			AssertFalse(guidLock.IsLocked(Guid.Empty), "Empty GUID key should be unlocked after release.");
+			AssertEqual(0, GetLockDictionaryCount(guidLock), "Empty GUID key entry should be removed after release.");
+		}
+
+		private static async Task SeparateInstancesIndependentAsync(CancellationToken cancellationToken)
+		{
+			Padlock<string> first = new Padlock<string>();
+			Padlock<string> second = new Padlock<string>();
+
+			using IDisposable firstHolder = first.Lock("shared-key");
+			AssertTrue(first.IsLocked("shared-key"), "First instance should report its own key as locked.");
+			AssertFalse(second.IsLocked("shared-key"), "Second instance should not observe the first instance's lock.");
+
+			// The same key on a separate instance must acquire immediately; if instances
+			// shared state this would block and the timeout below would fire.
+			IDisposable secondHolder = await second.LockAsync("shared-key", cancellationToken)
+				.AsTask()
+				.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
+			AssertTrue(second.IsLocked("shared-key"), "Second instance should acquire the same key independently.");
+
+			secondHolder.Dispose();
+			AssertTrue(first.IsLocked("shared-key"), "Releasing the second instance must not affect the first.");
+			AssertFalse(second.IsLocked("shared-key"), "Second instance should be unlocked after its own release.");
 		}
 
 		private static async Task SingleKeySyncExclusionAsync(CancellationToken cancellationToken)
@@ -820,6 +872,37 @@ namespace Test.Shared
 
 			int total = strings.Values.Sum() + ints.Values.Sum() + guids.Values.Sum();
 			AssertEqual(taskCount * iterations, total, "Mixed key stress test lost operations.");
+		}
+
+		private static async Task MaxCountSyncWaiterBlocksAsync(CancellationToken cancellationToken)
+		{
+			Padlock<string> padlock = new Padlock<string>(maxCount: 2);
+			IDisposable first = padlock.Lock("mc-sync");
+			IDisposable second = padlock.Lock("mc-sync");
+			AssertTrue(padlock.IsLocked("mc-sync"), "Key should be locked when both maxCount slots are held.");
+
+			TaskCompletionSource<object?> waiterStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+			bool acquired = false;
+
+			Task waiter = Task.Run(() =>
+			{
+				waiterStarted.SetResult(null);
+				using (padlock.Lock("mc-sync"))
+				{
+					acquired = true;
+				}
+			}, cancellationToken);
+
+			await waiterStarted.Task.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
+			await Task.Delay(100, cancellationToken);
+			AssertFalse(acquired, "Synchronous waiter acquired before a maxCount slot was released.");
+
+			first.Dispose();
+			await waiter.WaitAsync(TimeSpan.FromSeconds(2), cancellationToken);
+			AssertTrue(acquired, "Synchronous waiter did not acquire after a maxCount slot was released.");
+
+			second.Dispose();
+			AssertEqual(0, GetLockDictionaryCount(padlock), "Max-count sync waiter test left lock entries behind.");
 		}
 
 		private static Task KeyRemovalAfterReleaseAsync(CancellationToken cancellationToken)
