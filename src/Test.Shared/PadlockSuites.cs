@@ -74,7 +74,14 @@ namespace Test.Shared
 					Case(suiteId, "DisposeUnderContention", "Releases queued waiters when a holder is disposed", DisposeUnderContentionAsync),
 					Case(suiteId, "AcquireReleaseStormNoLeaks", "Leaves no lock entries after a mixed acquire/release storm", AcquireReleaseStormNoLeaksAsync),
 					Case(suiteId, "MultiTypeStress", "Handles mixed key types under load", MultiTypeStressAsync),
-					Case(suiteId, "MaxCountSyncWaiterBlocks", "Blocks a synchronous maxCount waiter until a slot frees", MaxCountSyncWaiterBlocksAsync)
+					Case(suiteId, "MaxCountSyncWaiterBlocks", "Blocks a synchronous maxCount waiter until a slot frees", MaxCountSyncWaiterBlocksAsync),
+					Case(suiteId, "SetMaxCountValidation", "Rejects invalid runtime maxCount values", SetMaxCountValidationAsync),
+					Case(suiteId, "MaxCountReflectsSetValue", "Reports the latest runtime maxCount value", MaxCountReflectsSetValueAsync),
+					Case(suiteId, "SetMaxCountAppliesToNewKeys", "Applies a runtime maxCount change to newly acquired keys", SetMaxCountAppliesToNewKeysAsync),
+					Case(suiteId, "SetMaxCountIncreaseVisibleAfterRecycle", "Applies a raised maxCount once a key is reacquired", SetMaxCountIncreaseVisibleAfterRecycleAsync),
+					Case(suiteId, "SetMaxCountDecreaseAppliesAfterIdle", "Applies a lowered maxCount once a key drains and is reacquired", SetMaxCountDecreaseAppliesAfterIdleAsync),
+					Case(suiteId, "SetMaxCountActiveKeyKeepsOldLimit", "Keeps the old limit for a key active at the time of the change", SetMaxCountActiveKeyKeepsOldLimitAsync),
+					Case(suiteId, "RuntimeMaxCountStressWithChanges", "Never exceeds the configured ceiling while maxCount changes under load", RuntimeMaxCountStressWithChangesAsync)
 				});
 		}
 
@@ -903,6 +910,261 @@ namespace Test.Shared
 
 			second.Dispose();
 			AssertEqual(0, GetLockDictionaryCount(padlock), "Max-count sync waiter test left lock entries behind.");
+		}
+
+		private static Task SetMaxCountValidationAsync(CancellationToken cancellationToken)
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+
+			Padlock<string> padlock = new Padlock<string>(maxCount: 3);
+			AssertThrows<ArgumentOutOfRangeException>(() => padlock.SetMaxCount(0), "Runtime maxCount below one should throw.");
+			AssertThrows<ArgumentOutOfRangeException>(() => padlock.SetMaxCount(-5), "Negative runtime maxCount should throw.");
+			AssertEqual(3, padlock.MaxCount, "Rejected runtime maxCount changes should not alter the current value.");
+
+			return Task.CompletedTask;
+		}
+
+		private static Task MaxCountReflectsSetValueAsync(CancellationToken cancellationToken)
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+
+			Padlock<string> padlock = new Padlock<string>();
+			AssertEqual(1, padlock.MaxCount, "Default maxCount should be one.");
+
+			padlock.SetMaxCount(7);
+			AssertEqual(7, padlock.MaxCount, "MaxCount should reflect the most recent SetMaxCount value.");
+
+			padlock.SetMaxCount(2);
+			AssertEqual(2, padlock.MaxCount, "MaxCount should reflect a subsequent SetMaxCount value.");
+
+			return Task.CompletedTask;
+		}
+
+		private static async Task SetMaxCountAppliesToNewKeysAsync(CancellationToken cancellationToken)
+		{
+			// A key that has never been acquired must adopt the runtime maxCount value in effect
+			// at the time of its first acquisition.
+			Padlock<string> padlock = new Padlock<string>(maxCount: 1);
+			padlock.SetMaxCount(3);
+
+			IDisposable first = padlock.Lock("fresh");
+			IDisposable second = padlock.Lock("fresh");
+			AssertFalse(padlock.IsLocked("fresh"), "Two of three slots held should leave the key not fully locked.");
+
+			IDisposable third = padlock.Lock("fresh");
+			AssertTrue(padlock.IsLocked("fresh"), "All three slots held should report the key as locked.");
+
+			bool fourthAcquired = false;
+			Task fourth = Task.Run(async () =>
+			{
+				using (await padlock.LockAsync("fresh", cancellationToken))
+				{
+					fourthAcquired = true;
+				}
+			}, cancellationToken);
+
+			await Task.Delay(100, cancellationToken);
+			AssertFalse(fourthAcquired, "A fourth holder acquired before a slot on the new maxCount was released.");
+
+			first.Dispose();
+			await fourth.WaitAsync(TimeSpan.FromSeconds(2), cancellationToken);
+			AssertTrue(fourthAcquired, "Fourth holder did not acquire after a slot was released.");
+
+			second.Dispose();
+			third.Dispose();
+			AssertEqual(0, GetLockDictionaryCount(padlock), "Runtime maxCount new-key test left lock entries behind.");
+		}
+
+		private static Task SetMaxCountIncreaseVisibleAfterRecycleAsync(CancellationToken cancellationToken)
+		{
+			// A key acquired under the old (lower) limit must adopt an increased limit once it
+			// has drained and is acquired again.
+			cancellationToken.ThrowIfCancellationRequested();
+
+			Padlock<string> padlock = new Padlock<string>(maxCount: 1);
+
+			using (padlock.Lock("recycled"))
+			{
+				AssertTrue(padlock.IsLocked("recycled"), "Exclusive key should be locked while held.");
+			}
+
+			padlock.SetMaxCount(3);
+
+			IDisposable first = padlock.Lock("recycled");
+			IDisposable second = padlock.Lock("recycled");
+			IDisposable third = padlock.Lock("recycled");
+			AssertTrue(padlock.IsLocked("recycled"), "Reacquired key should expose the raised concurrency of three slots.");
+
+			first.Dispose();
+			second.Dispose();
+			third.Dispose();
+			AssertEqual(0, GetLockDictionaryCount(padlock), "Runtime maxCount increase test left lock entries behind.");
+
+			return Task.CompletedTask;
+		}
+
+		private static async Task SetMaxCountDecreaseAppliesAfterIdleAsync(CancellationToken cancellationToken)
+		{
+			// A key acquired under the old (higher) limit must adopt a decreased limit once it
+			// has drained and is acquired again.
+			Padlock<string> padlock = new Padlock<string>(maxCount: 3);
+
+			IDisposable a = padlock.Lock("shrink");
+			IDisposable b = padlock.Lock("shrink");
+			a.Dispose();
+			b.Dispose();
+			AssertEqual(0, GetLockDictionaryCount(padlock), "Key should drain before the decrease is validated.");
+
+			padlock.SetMaxCount(1);
+
+			IDisposable holder = padlock.Lock("shrink");
+			AssertTrue(padlock.IsLocked("shrink"), "Reacquired key should now be exclusive under the lowered limit.");
+
+			bool secondAcquired = false;
+			Task second = Task.Run(async () =>
+			{
+				using (await padlock.LockAsync("shrink", cancellationToken))
+				{
+					secondAcquired = true;
+				}
+			}, cancellationToken);
+
+			await Task.Delay(100, cancellationToken);
+			AssertFalse(secondAcquired, "A second holder acquired despite the lowered exclusive limit.");
+
+			holder.Dispose();
+			await second.WaitAsync(TimeSpan.FromSeconds(2), cancellationToken);
+			AssertTrue(secondAcquired, "Second holder did not acquire after the exclusive holder released.");
+
+			AssertEqual(0, GetLockDictionaryCount(padlock), "Runtime maxCount decrease test left lock entries behind.");
+		}
+
+		private static async Task SetMaxCountActiveKeyKeepsOldLimitAsync(CancellationToken cancellationToken)
+		{
+			// Documents the lazy boundary: a key active at the moment of the change keeps its old
+			// limit until it fully drains, and only then adopts the new limit.
+			Padlock<string> padlock = new Padlock<string>(maxCount: 3);
+
+			IDisposable first = padlock.Lock("active");
+
+			// Lower the limit while the key is still active.
+			padlock.SetMaxCount(1);
+
+			// The live entry retains its original three-slot capacity, so a second holder still gets in.
+			// Acquire with a timeout so a regression (immediate application) fails cleanly instead of hanging.
+			IDisposable second = await padlock.LockAsync("active", cancellationToken)
+				.AsTask()
+				.WaitAsync(TimeSpan.FromSeconds(2), cancellationToken);
+
+			first.Dispose();
+			second.Dispose();
+			AssertEqual(0, GetLockDictionaryCount(padlock), "Active key entry should be removed after all holders release.");
+
+			// After draining, the next acquisition adopts the lowered limit.
+			IDisposable exclusive = padlock.Lock("active");
+			AssertTrue(padlock.IsLocked("active"), "Reacquired key should now honor the lowered exclusive limit.");
+
+			bool blockedAcquired = false;
+			Task blocked = Task.Run(async () =>
+			{
+				using (await padlock.LockAsync("active", cancellationToken))
+				{
+					blockedAcquired = true;
+				}
+			}, cancellationToken);
+
+			await Task.Delay(100, cancellationToken);
+			AssertFalse(blockedAcquired, "A second holder acquired after the key adopted the lowered exclusive limit.");
+
+			exclusive.Dispose();
+			await blocked.WaitAsync(TimeSpan.FromSeconds(2), cancellationToken);
+			AssertTrue(blockedAcquired, "Blocked holder did not acquire after the exclusive holder released.");
+
+			AssertEqual(0, GetLockDictionaryCount(padlock), "Lazy-boundary test left lock entries behind.");
+		}
+
+		private static async Task RuntimeMaxCountStressWithChangesAsync(CancellationToken cancellationToken)
+		{
+			// Long-running, multi-threaded test that repeatedly changes maxCount while many workers
+			// acquire and release a small set of keys. The core invariant is that the number of
+			// concurrent holders for any key never exceeds the highest maxCount ever configured,
+			// because each entry is sized from whichever maxCount was current when it was created.
+			const int ceiling = 5;
+			int[] allowedCounts = { 1, 2, 3, 4, 5 };
+			string[] keys = { "stress-0", "stress-1", "stress-2", "stress-3" };
+
+			Padlock<string> padlock = new Padlock<string>(maxCount: 1);
+
+			int[] currentPerKey = new int[keys.Length];
+			int[] maxObservedPerKey = new int[keys.Length];
+			long totalOperations = 0;
+
+			int workerCount = 32;
+			int iterationsPerWorker = 500;
+			int changerRunning = 1;
+
+			// Background task that continuously churns the instance-wide maxCount.
+			Task changer = Task.Run(async () =>
+			{
+				int index = 0;
+				while (Volatile.Read(ref changerRunning) == 1)
+				{
+					index = (index + 1) % allowedCounts.Length;
+					padlock.SetMaxCount(allowedCounts[index]);
+					await Task.Yield();
+				}
+			}, cancellationToken);
+
+			Task[] workers = Enumerable.Range(0, workerCount).Select(workerIndex => Task.Run(async () =>
+			{
+				Random random = new Random(workerIndex * 31 + 7);
+				for (int i = 0; i < iterationsPerWorker; i++)
+				{
+					cancellationToken.ThrowIfCancellationRequested();
+					int keyIndex = random.Next(keys.Length);
+					string key = keys[keyIndex];
+
+					if ((workerIndex + i) % 2 == 0)
+					{
+						using (padlock.Lock(key))
+						{
+							RecordConcurrentEntry(ref currentPerKey[keyIndex], ref maxObservedPerKey[keyIndex]);
+							Thread.SpinWait(50);
+							Interlocked.Decrement(ref currentPerKey[keyIndex]);
+							Interlocked.Increment(ref totalOperations);
+						}
+					}
+					else
+					{
+						using (await padlock.LockAsync(key, cancellationToken))
+						{
+							RecordConcurrentEntry(ref currentPerKey[keyIndex], ref maxObservedPerKey[keyIndex]);
+							await Task.Yield();
+							Interlocked.Decrement(ref currentPerKey[keyIndex]);
+							Interlocked.Increment(ref totalOperations);
+						}
+					}
+				}
+			}, cancellationToken)).ToArray();
+
+			await Task.WhenAll(workers);
+			Volatile.Write(ref changerRunning, 0);
+			await changer.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+
+			for (int i = 0; i < keys.Length; i++)
+			{
+				AssertTrue(
+					maxObservedPerKey[i] <= ceiling,
+					$"Key {keys[i]} observed {maxObservedPerKey[i]} concurrent holders, exceeding the ceiling of {ceiling}.");
+			}
+
+			int overallMaxObserved = maxObservedPerKey.Max();
+			AssertTrue(
+				overallMaxObserved >= 2,
+				"Expected raised maxCount values to produce more than one concurrent holder at some point under load.");
+
+			AssertEqual((long)workerCount * iterationsPerWorker, totalOperations, "Runtime maxCount stress test lost operations.");
+			AssertEqual(0, GetLockDictionaryCount(padlock), "Runtime maxCount stress test left lock entries behind.");
 		}
 
 		private static Task KeyRemovalAfterReleaseAsync(CancellationToken cancellationToken)

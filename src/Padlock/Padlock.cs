@@ -14,7 +14,7 @@ namespace Padlocks
     {
         private readonly ConcurrentDictionary<T, LockEntry> _locks = new ConcurrentDictionary<T, LockEntry>();
         private readonly ConcurrentBag<LockEntry> _pool = new ConcurrentBag<LockEntry>();
-        private readonly int _maxCount;
+        private volatile int _maxCount;
         private readonly int _poolSize;
 
         /// <summary>
@@ -28,6 +28,29 @@ namespace Padlocks
             if (poolSize < 0) throw new ArgumentOutOfRangeException(nameof(poolSize), "Must be non-negative.");
             _maxCount = maxCount;
             _poolSize = poolSize;
+        }
+
+        /// <summary>
+        /// Gets the maximum number of concurrent holders currently applied to newly created locks.
+        /// </summary>
+        public int MaxCount => _maxCount;
+
+        /// <summary>
+        /// Updates the maximum number of concurrent holders for this instance.
+        /// </summary>
+        /// <remarks>
+        /// The new limit is applied lazily. It takes effect for any key acquired after this call, and for any
+        /// currently-idle key the next time it is acquired (including lock entries recycled from the pool). A key
+        /// that is active at the moment of the call keeps its existing limit until every holder and waiter releases
+        /// and its entry becomes idle; the next acquisition then adopts the new limit. As a result, increases become
+        /// visible as keys are acquired or recycled, while a decrease only takes effect for a given key once that key
+        /// drains to zero holders at least once. Existing holders are never evicted.
+        /// </remarks>
+        /// <param name="maxCount">New maximum number of concurrent holders. Must be at least 1.</param>
+        public void SetMaxCount(int maxCount)
+        {
+            if (maxCount < 1) throw new ArgumentOutOfRangeException(nameof(maxCount), "Must be at least 1.");
+            _maxCount = maxCount;
         }
 
         /// <summary>

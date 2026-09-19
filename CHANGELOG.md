@@ -2,13 +2,20 @@
 
 ## Current Version
 
+v1.1.0
+
+- Added `SetMaxCount(int)` to adjust the instance-wide maximum number of concurrent holders at runtime
+- Added `MaxCount` property to read the current maximum
+- Runtime changes are applied lazily: they take effect for keys acquired after the call and for idle keys on their next acquisition (including pooled entries reused via `Reset`); a key that is active at the time of the change keeps its existing limit until it drains, and existing holders are never evicted
+- Added positive and negative test coverage for runtime `maxCount` changes, including a long-running multi-threaded stress test that churns `maxCount` under contention and validates the concurrency ceiling is never exceeded
+
+## Previous Versions
+
 v1.0.3
 
 - Fixed race condition in pooling: `Reset()` no longer disposes the old semaphore while a stale reference may still read it; the old `SemaphoreSlim` is left for GC collection
 - Fixed `AcquireEntry` to verify the entry is still the current one in the dictionary after entering the monitor, preventing cross-key contamination from pooled entry reuse
 - Restructured test program with per-test PASS/FAIL reporting, per-test runtime, and overall summary with failed test listing
-
-## Previous Versions
 
 v1.0.2
 

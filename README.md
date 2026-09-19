@@ -13,6 +13,7 @@ Core features:
 - Create locks based on any key type (string, int, GUID, custom objects, etc.)
 - Support for both synchronous and asynchronous locking patterns
 - Configurable concurrency per key (exclusive or shared locks)
+- Runtime-adjustable concurrency via `SetMaxCount` (applied lazily; see below)
 - Object pooling for reduced allocations under high throughput
 - ValueTask-based async API for reduced overhead
 - Efficient memory usage with automatic resource cleanup
@@ -108,6 +109,24 @@ Task task3 = Task.Run(async () =>
 
 await Task.WhenAll(task1, task2, task3);
 ```
+
+## Adjusting Concurrency at Runtime
+
+The instance-wide `maxCount` can be changed at any time with `SetMaxCount`, and the current value can be read from the `MaxCount` property:
+
+```csharp
+Padlock<string> padlock = new Padlock<string>(maxCount: 1); // exclusive to start
+
+padlock.SetMaxCount(4);            // allow up to 4 concurrent holders
+int current = padlock.MaxCount;    // 4
+```
+
+The new limit is applied **lazily**:
+
+- It takes effect for any key acquired after the call, and for any currently-idle key the next time it is acquired (including lock entries recycled from the internal pool).
+- A key that is **active** at the moment of the call keeps its existing limit until every holder and waiter releases and its entry becomes idle. The next acquisition then adopts the new limit.
+
+In practice this means an **increase** becomes visible as keys are acquired or recycled, while a **decrease** only takes effect for a given key once that key drains to zero holders at least once. Existing holders are never evicted, so a continuously-busy key that never drains will retain its previous limit until it does. `SetMaxCount` throws `ArgumentOutOfRangeException` if the value is less than `1`.
 
 ## Lock With Custom Types
 
