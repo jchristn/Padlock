@@ -79,7 +79,7 @@ Histograms suggest explicit bucket boundaries from 10 µs to 120 s (`0.00001` to
 | `padlock.contended` | `true` when the key had no free slot and the caller waited, otherwise `false`. For sync locks this is sampled just before waiting. For async locks it means the wait did not complete synchronously. |
 | `padlock.pool.result` | `hit`, `miss` |
 | `error.type` | Exception full type name, for example `System.OperationCanceledException`, `System.ArgumentNullException` |
-| `padlock.version` | Assembly version, for example `1.2.0` |
+| `padlock.version` | Assembly version, for example `1.2.1` |
 
 Keys are **never** recorded on metrics or spans. They may be ids or personal data, and they are unbounded.
 

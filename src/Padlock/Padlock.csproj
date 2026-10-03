@@ -17,9 +17,9 @@
 		<RepositoryUrl>https://github.com/jchristn/padlock</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<PackageTags>lock locks semaphore semaphoreslim async key telemetry opentelemetry metrics tracing</PackageTags>
-		<PackageReleaseNotes>v1.2.0 - Built-in OpenTelemetry-compatible metrics and traces via System.Diagnostics Meter and ActivitySource named "Padlock"; Name property for the padlock.name label</PackageReleaseNotes>
-		<AssemblyVersion>1.2.0</AssemblyVersion>
-		<Version>1.2.0</Version>
+		<PackageReleaseNotes>v1.2.1 - Dependency updates for test projects (Touchstone 0.2.0, NUnit 5.0.0, Microsoft.NET.Test.Sdk 18.10.1, coverlet.collector 10.1.0); no library API changes</PackageReleaseNotes>
+		<AssemblyVersion>1.2.1</AssemblyVersion>
+		<Version>1.2.1</Version>
 		<PackageLicenseFile>LICENSE.md</PackageLicenseFile>
 		<IncludeSymbols>True</IncludeSymbols>
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>

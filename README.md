@@ -218,6 +218,15 @@ Or via the .NET CLI:
 dotnet add package Padlock
 ```
 
+## Testing
+
+All tests are defined once in `src/Test.Shared` as [Touchstone](https://www.nuget.org/packages/Touchstone.Core) suites and run three ways, each on net8.0 and net10.0:
+
+```
+dotnet test src/Padlock.sln                                  # xUnit and NUnit adapters
+dotnet run --project src/Test.Automated -f net10.0           # console runner
+```
+
 ## Version History
 
 Refer to CHANGELOG.md.

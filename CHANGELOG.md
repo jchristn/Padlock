@@ -2,6 +2,13 @@
 
 ## Current Version
 
+v1.2.1
+
+- Updated test dependencies: `Touchstone.Core`, `Touchstone.Cli`, `Touchstone.XunitAdapter`, and `Touchstone.NunitAdapter` 0.1.12 -> 0.2.0; `NUnit` 4.6.1 -> 5.0.0; `NUnit.Analyzers` 4.14.0 -> 4.15.0; `NUnit3TestAdapter` 6.2.0 -> 6.3.0; `Microsoft.NET.Test.Sdk` 18.9.0 -> 18.10.1; `coverlet.collector` 10.0.1 -> 10.1.0
+- No library API or runtime dependency changes; all 62 shared Touchstone tests pass under xUnit, NUnit 5, and the console runner on net8.0 and net10.0
+
+## Previous Versions
+
 v1.2.0
 
 - Added built-in telemetry through `System.Diagnostics`: a `Meter` and an `ActivitySource`, both named `Padlock`, with no SDK or exporter dependency and near-zero cost when unobserved
@@ -13,8 +20,6 @@ v1.2.0
 - `LockAsync` now awaits with `ConfigureAwait(false)`
 - Added `System.Diagnostics.DiagnosticSource` 10.0.12 package reference for targets other than net10.0
 - Added telemetry test suite using in-memory `MeterListener`/`ActivityListener`, covering success, contention, cancellation, error, pool, gauge, no-listener, and throwing-listener paths
-
-## Previous Versions
 
 v1.1.0
 
