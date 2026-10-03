@@ -2,14 +2,26 @@
 
 ## Current Version
 
+v1.2.0
+
+- Added built-in telemetry through `System.Diagnostics`: a `Meter` and an `ActivitySource`, both named `Padlock`, with no SDK or exporter dependency and near-zero cost when unobserved
+- Metrics: `padlock.lock.wait.duration` (by mode, outcome, contention, and `error.type`), `padlock.lock.hold.duration`, `padlock.lock.holders`, `padlock.lock.pending`, `padlock.keys.active`, `padlock.max_count`, `padlock.max_count.changes`, `padlock.pool.size`, `padlock.pool.capacity`, `padlock.pool.requests`, `padlock.pool.discards`, `padlock.instances`, `padlock.build.info`
+- Traces: a `padlock.acquire` span per acquisition, nested under the caller's activity, with status `Error` and an exception event on cancellation or failure; `SetMaxCount` adds a `padlock.max_count.changed` event to the current activity
+- Added the `Name` property, used as the `padlock.name` label (default `default`)
+- Added the `PadlockTelemetry` class with every meter, source, instrument, attribute, and value name as public constants
+- Added `TELEMETRY.md` documenting the full catalog, subscription, PromQL, and alerts
+- `LockAsync` now awaits with `ConfigureAwait(false)`
+- Added `System.Diagnostics.DiagnosticSource` 10.0.12 package reference for targets other than net10.0
+- Added telemetry test suite using in-memory `MeterListener`/`ActivityListener`, covering success, contention, cancellation, error, pool, gauge, no-listener, and throwing-listener paths
+
+## Previous Versions
+
 v1.1.0
 
 - Added `SetMaxCount(int)` to adjust the instance-wide maximum number of concurrent holders at runtime
 - Added `MaxCount` property to read the current maximum
 - Runtime changes are applied lazily: they take effect for keys acquired after the call and for idle keys on their next acquisition (including pooled entries reused via `Reset`); a key that is active at the time of the change keeps its existing limit until it drains, and existing holders are never evicted
 - Added positive and negative test coverage for runtime `maxCount` changes, including a long-running multi-threaded stress test that churns `maxCount` under contention and validates the concurrency ceiling is never exceeded
-
-## Previous Versions
 
 v1.0.3
 

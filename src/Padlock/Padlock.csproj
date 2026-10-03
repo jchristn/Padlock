@@ -4,6 +4,7 @@
 		<TargetFrameworks>netstandard2.0;netstandard2.1;net8.0;net10.0</TargetFrameworks>
 		<ApplicationIcon>icon.ico</ApplicationIcon>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
+		<LangVersion>latest</LangVersion>
 		<DocumentationFile>Padlock.xml</DocumentationFile>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>Padlock is a lightweight, high-performance library that provides key-based locking for multithreaded applications.</Title>
@@ -15,10 +16,10 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<RepositoryUrl>https://github.com/jchristn/padlock</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
-		<PackageTags>lock locks semaphore semaphoreslim async key</PackageTags>
-		<PackageReleaseNotes>v1.1.0 - Runtime-adjustable instance-wide concurrency via SetMaxCount/MaxCount (lazy application)</PackageReleaseNotes>
-		<AssemblyVersion>1.1.0</AssemblyVersion>
-		<Version>1.1.0</Version>
+		<PackageTags>lock locks semaphore semaphoreslim async key telemetry opentelemetry metrics tracing</PackageTags>
+		<PackageReleaseNotes>v1.2.0 - Built-in OpenTelemetry-compatible metrics and traces via System.Diagnostics Meter and ActivitySource named "Padlock"; Name property for the padlock.name label</PackageReleaseNotes>
+		<AssemblyVersion>1.2.0</AssemblyVersion>
+		<Version>1.2.0</Version>
 		<PackageLicenseFile>LICENSE.md</PackageLicenseFile>
 		<IncludeSymbols>True</IncludeSymbols>
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
@@ -45,6 +46,10 @@
 
 	<ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
 		<PackageReference Include="System.Threading.Tasks.Extensions" Version="4.6.3" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(TargetFramework)' != 'net10.0'">
+		<PackageReference Include="System.Diagnostics.DiagnosticSource" Version="10.0.12" />
 	</ItemGroup>
 
 </Project>

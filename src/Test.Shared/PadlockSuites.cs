@@ -16,7 +16,8 @@ namespace Test.Shared
 				{
 					CoreBehaviorSuite(),
 					ConcurrencySuite(),
-					ResourceManagementSuite()
+					ResourceManagementSuite(),
+					PadlockTelemetrySuites.TelemetrySuite()
 				};
 			}
 		}
@@ -1361,7 +1362,7 @@ namespace Test.Shared
 		private static int GetLockDictionaryCount<T>(Padlock<T> padlock)
 			where T : notnull
 		{
-			FieldInfo? field = typeof(Padlock<T>).GetField("_locks", BindingFlags.NonPublic | BindingFlags.Instance);
+			FieldInfo? field = typeof(Padlock<T>).GetField("_Locks", BindingFlags.NonPublic | BindingFlags.Instance);
 			IDictionary dictionary = field?.GetValue(padlock) as IDictionary
 				?? throw new InvalidOperationException("Could not read Padlock lock dictionary.");
 
@@ -1371,7 +1372,7 @@ namespace Test.Shared
 		private static int GetPoolCount<T>(Padlock<T> padlock)
 			where T : notnull
 		{
-			FieldInfo? field = typeof(Padlock<T>).GetField("_pool", BindingFlags.NonPublic | BindingFlags.Instance);
+			FieldInfo? field = typeof(Padlock<T>).GetField("_Pool", BindingFlags.NonPublic | BindingFlags.Instance);
 			ICollection pool = field?.GetValue(padlock) as ICollection
 				?? throw new InvalidOperationException("Could not read Padlock pool.");
 
@@ -1381,7 +1382,7 @@ namespace Test.Shared
 		private static int GetLockEntryRefCount<T>(Padlock<T> padlock, T key)
 			where T : notnull
 		{
-			FieldInfo? locksField = typeof(Padlock<T>).GetField("_locks", BindingFlags.NonPublic | BindingFlags.Instance);
+			FieldInfo? locksField = typeof(Padlock<T>).GetField("_Locks", BindingFlags.NonPublic | BindingFlags.Instance);
 			IDictionary dictionary = locksField?.GetValue(padlock) as IDictionary
 				?? throw new InvalidOperationException("Could not read Padlock lock dictionary.");
 

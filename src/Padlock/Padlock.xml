@@ -4,11 +4,46 @@
         <name>Padlock</name>
     </assembly>
     <members>
+        <member name="T:Padlocks.IPadlockObservable">
+            <summary>
+            State a Padlock instance exposes to its observable gauges. Read only at collection time.
+            </summary>
+        </member>
+        <member name="P:Padlocks.IPadlockObservable.TelemetryName">
+            <summary>
+            Instance name used as the metric label.
+            </summary>
+        </member>
+        <member name="P:Padlocks.IPadlockObservable.TelemetryMaxCount">
+            <summary>
+            Configured maximum concurrent holders per key.
+            </summary>
+        </member>
+        <member name="P:Padlocks.IPadlockObservable.TelemetryActiveKeys">
+            <summary>
+            Keys currently tracked.
+            </summary>
+        </member>
+        <member name="P:Padlocks.IPadlockObservable.TelemetryPoolSize">
+            <summary>
+            Entries currently pooled.
+            </summary>
+        </member>
+        <member name="P:Padlocks.IPadlockObservable.TelemetryPoolCapacity">
+            <summary>
+            Configured pool capacity.
+            </summary>
+        </member>
         <member name="T:Padlocks.Padlock`1">
             <summary>
             Padlock is a lightweight, high-performance library that provides key-based locking for multithreaded applications.
             It enables granular locking on specific resources identified by keys of any type, allowing for efficient concurrency control without unnecessary blocking.
             </summary>
+            <remarks>
+            Every instance emits metrics and spans through the <see cref="F:Padlocks.PadlockTelemetry.MeterName"/> meter and the
+            <see cref="F:Padlocks.PadlockTelemetry.ActivitySourceName"/> activity source, labeled with <see cref="P:Padlocks.Padlock`1.Name"/>. Emission is
+            best-effort and costs a few flag checks when nothing subscribes. See TELEMETRY.md for the full catalog.
+            </remarks>
             <typeparam name="T">Type of key.</typeparam>
         </member>
         <member name="M:Padlocks.Padlock`1.#ctor(System.Int32,System.Int32)">
@@ -17,11 +52,22 @@
             </summary>
             <param name="maxCount">Maximum number of concurrent holders for each key. Default is 1 (exclusive lock).</param>
             <param name="poolSize">Maximum number of pooled lock entries for reuse. Default is 20.</param>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when <paramref name="maxCount"/> is less than 1 or <paramref name="poolSize"/> is negative.</exception>
         </member>
         <member name="P:Padlocks.Padlock`1.MaxCount">
             <summary>
             Gets the maximum number of concurrent holders currently applied to newly created locks.
             </summary>
+        </member>
+        <member name="P:Padlocks.Padlock`1.Name">
+            <summary>
+            Gets or sets the name used as the <c>padlock.name</c> label on this instance's metrics and spans.
+            Default is <c>"default"</c>. Use a small, fixed set of names (for example one per subsystem); never derive the
+            name from a key, an id, or user input, because every distinct name creates new metric series. Instances that
+            share a name are aggregated together. The name may be changed at any time and applies to subsequent operations.
+            </summary>
+            <exception cref="T:System.ArgumentNullException">Thrown when the value is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when the value is empty or whitespace.</exception>
         </member>
         <member name="M:Padlocks.Padlock`1.SetMaxCount(System.Int32)">
             <summary>
@@ -36,6 +82,7 @@
             drains to zero holders at least once. Existing holders are never evicted.
             </remarks>
             <param name="maxCount">New maximum number of concurrent holders. Must be at least 1.</param>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when <paramref name="maxCount"/> is less than 1.</exception>
         </member>
         <member name="M:Padlocks.Padlock`1.Lock(`0)">
             <summary>
@@ -43,6 +90,7 @@
             </summary>
             <param name="key">The key on which to lock.</param>
             <returns>A disposable object that releases the lock when disposed.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when <paramref name="key"/> is a null reference.</exception>
         </member>
         <member name="M:Padlocks.Padlock`1.LockAsync(`0,System.Threading.CancellationToken)">
             <summary>
@@ -51,6 +99,8 @@
             <param name="key">The key on which to lock.</param>
             <param name="cancellationToken">Optional cancellation token.</param>
             <returns>A disposable object that releases the lock when disposed.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when <paramref name="key"/> is a null reference.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when <paramref name="cancellationToken"/> is cancelled before the lock is acquired.</exception>
         </member>
         <member name="M:Padlocks.Padlock`1.IsLocked(`0)">
             <summary>
@@ -86,17 +136,214 @@
             </summary>
             <param name="maxCount">Maximum number of concurrent holders.</param>
         </member>
-        <member name="M:Padlocks.Padlock`1.LockReleaser.#ctor(Padlocks.Padlock{`0},Padlocks.Padlock{`0}.LockEntry,`0)">
+        <member name="M:Padlocks.Padlock`1.LockReleaser.#ctor(Padlocks.Padlock{`0},Padlocks.Padlock{`0}.LockEntry,`0,System.String,System.String)">
             <summary>
             Creates a new lock releaser.
             </summary>
             <param name="padlock">The owning padlock instance.</param>
             <param name="entry">The lock entry to release.</param>
             <param name="key">The key associated with this lock.</param>
+            <param name="name">The instance name at acquisition time, used for telemetry.</param>
+            <param name="mode">The acquisition mode, used for telemetry.</param>
         </member>
         <member name="M:Padlocks.Padlock`1.LockReleaser.Dispose">
             <summary>
             Releases the lock.
+            </summary>
+        </member>
+        <member name="T:Padlocks.PadlockInstrumentation">
+            <summary>
+            Process-wide Padlock meter, activity source, and instruments. Every method is best-effort: a failure inside
+            instrumentation (including an exception thrown by a subscribed listener) is swallowed and never affects locking.
+            </summary>
+        </member>
+        <member name="T:Padlocks.PadlockTelemetry">
+            <summary>
+            Stable public names for the telemetry Padlock emits through <see cref="T:System.Diagnostics.Metrics.Meter"/> and
+            <see cref="T:System.Diagnostics.ActivitySource"/>. These names are a public contract consumed by collectors and
+            dashboards and do not change between minor versions.
+            </summary>
+            <remarks>
+            Padlock takes no dependency on any telemetry SDK or exporter. A host subscribes by name, for example with Radiant
+            (<c>settings.Sources.AddMeter(PadlockTelemetry.MeterName)</c> and
+            <c>settings.Sources.AddActivitySource(PadlockTelemetry.ActivitySourceName)</c>) or with the OpenTelemetry SDK
+            (<c>AddMeter</c> / <c>AddSource</c>). When nothing subscribes, emission costs a few flag checks and allocates nothing.
+            This class is thread safe; it contains only constants.
+            </remarks>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.MeterName">
+            <summary>
+            Name of the <see cref="T:System.Diagnostics.Metrics.Meter"/> that carries every Padlock metric.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.ActivitySourceName">
+            <summary>
+            Name of the <see cref="T:System.Diagnostics.ActivitySource"/> that carries every Padlock span.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.DefaultName">
+            <summary>
+            Default value of <see cref="P:Padlocks.Padlock`1.Name"/>, used as the <see cref="F:Padlocks.PadlockTelemetry.AttributeName"/> label when no name is set.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.AcquireSpanName">
+            <summary>
+            Name of the span opened for each lock acquisition. Its duration is the time spent waiting for the lock.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.MaxCountChangedEventName">
+            <summary>
+            Name of the span event added to the current activity when <see cref="M:Padlocks.Padlock`1.SetMaxCount(System.Int32)"/> is called.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.LockWaitDuration">
+            <summary>
+            Histogram, seconds: time spent acquiring a lock, from the call until the lock is held or the attempt fails.
+            Labels: <see cref="F:Padlocks.PadlockTelemetry.AttributeName"/>, <see cref="F:Padlocks.PadlockTelemetry.AttributeMode"/>, <see cref="F:Padlocks.PadlockTelemetry.AttributeOutcome"/>,
+            <see cref="F:Padlocks.PadlockTelemetry.AttributeContended"/>, and <see cref="F:Padlocks.PadlockTelemetry.AttributeErrorType"/> on failures.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.LockHoldDuration">
+            <summary>
+            Histogram, seconds: time a lock was held, from acquisition until the handle is disposed.
+            Labels: <see cref="F:Padlocks.PadlockTelemetry.AttributeName"/>, <see cref="F:Padlocks.PadlockTelemetry.AttributeMode"/>.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.LockHolders">
+            <summary>
+            UpDownCounter, {holder}: locks currently held. Label: <see cref="F:Padlocks.PadlockTelemetry.AttributeName"/>.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.LockPending">
+            <summary>
+            UpDownCounter, {request}: lock acquisitions currently in progress (queued waiters).
+            Labels: <see cref="F:Padlocks.PadlockTelemetry.AttributeName"/>, <see cref="F:Padlocks.PadlockTelemetry.AttributeMode"/>.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.KeysActive">
+            <summary>
+            ObservableGauge, {key}: keys currently tracked (held or waited on). Label: <see cref="F:Padlocks.PadlockTelemetry.AttributeName"/>.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.MaxCount">
+            <summary>
+            ObservableGauge, {holder}: configured maximum concurrent holders per key. Label: <see cref="F:Padlocks.PadlockTelemetry.AttributeName"/>.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.MaxCountChanges">
+            <summary>
+            Counter, {change}: calls to <see cref="M:Padlocks.Padlock`1.SetMaxCount(System.Int32)"/>. Label: <see cref="F:Padlocks.PadlockTelemetry.AttributeName"/>.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.PoolSize">
+            <summary>
+            ObservableGauge, {entry}: lock entries currently held in the reuse pool. Label: <see cref="F:Padlocks.PadlockTelemetry.AttributeName"/>.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.PoolCapacity">
+            <summary>
+            ObservableGauge, {entry}: configured pool capacity. Label: <see cref="F:Padlocks.PadlockTelemetry.AttributeName"/>.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.PoolRequests">
+            <summary>
+            Counter, {request}: requests for a lock entry, by whether the pool supplied one.
+            Labels: <see cref="F:Padlocks.PadlockTelemetry.AttributeName"/>, <see cref="F:Padlocks.PadlockTelemetry.AttributePoolResult"/>.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.PoolDiscards">
+            <summary>
+            Counter, {entry}: lock entries discarded because the pool was full. Label: <see cref="F:Padlocks.PadlockTelemetry.AttributeName"/>.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.Instances">
+            <summary>
+            ObservableGauge, {instance}: live Padlock instances. Label: <see cref="F:Padlocks.PadlockTelemetry.AttributeName"/>.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.BuildInfo">
+            <summary>
+            ObservableGauge, always 1: build information. Label: <see cref="F:Padlocks.PadlockTelemetry.AttributeVersion"/>.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.AttributeName">
+            <summary>
+            Attribute: the instance name from <see cref="P:Padlocks.Padlock`1.Name"/>. Bounded by the application.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.AttributeMode">
+            <summary>
+            Attribute: <see cref="F:Padlocks.PadlockTelemetry.ModeSync"/> or <see cref="F:Padlocks.PadlockTelemetry.ModeAsync"/>.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.AttributeOutcome">
+            <summary>
+            Attribute: <see cref="F:Padlocks.PadlockTelemetry.OutcomeAcquired"/>, <see cref="F:Padlocks.PadlockTelemetry.OutcomeCancelled"/>, or <see cref="F:Padlocks.PadlockTelemetry.OutcomeError"/>.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.AttributeContended">
+            <summary>
+            Attribute: true when the lock was not immediately available and the caller had to wait.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.AttributeMaxCount">
+            <summary>
+            Attribute (spans only): the per-key concurrency limit in effect for the instance at acquisition time.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.AttributePreviousMaxCount">
+            <summary>
+            Attribute (span events only): the previous maximum when <see cref="M:Padlocks.Padlock`1.SetMaxCount(System.Int32)"/> is called.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.AttributePoolResult">
+            <summary>
+            Attribute: <see cref="F:Padlocks.PadlockTelemetry.PoolResultHit"/> or <see cref="F:Padlocks.PadlockTelemetry.PoolResultMiss"/>.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.AttributeVersion">
+            <summary>
+            Attribute: the Padlock assembly version.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.AttributeErrorType">
+            <summary>
+            Attribute: the full type name of the exception that failed an acquisition (OpenTelemetry <c>error.type</c>).
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.ModeSync">
+            <summary>
+            Mode value for <see cref="M:Padlocks.Padlock`1.Lock(`0)"/>.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.ModeAsync">
+            <summary>
+            Mode value for <see cref="M:Padlocks.Padlock`1.LockAsync(`0,System.Threading.CancellationToken)"/>.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.OutcomeAcquired">
+            <summary>
+            Outcome value: the lock was acquired.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.OutcomeCancelled">
+            <summary>
+            Outcome value: the acquisition was cancelled through its <see cref="T:System.Threading.CancellationToken"/>.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.OutcomeError">
+            <summary>
+            Outcome value: the acquisition failed with an exception other than cancellation.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.PoolResultHit">
+            <summary>
+            Pool result value: an entry was reused from the pool.
+            </summary>
+        </member>
+        <member name="F:Padlocks.PadlockTelemetry.PoolResultMiss">
+            <summary>
+            Pool result value: a new entry was allocated.
             </summary>
         </member>
     </members>

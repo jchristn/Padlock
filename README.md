@@ -19,6 +19,7 @@ Core features:
 - Efficient memory usage with automatic resource cleanup
 - Cancellation support via standard CancellationToken
 - Simple, intuitive API with IDisposable pattern for lock release
+- Built-in OpenTelemetry-compatible metrics and traces (lock wait, hold time, contention, failures, pool usage) with no SDK dependency
 
 ## Special Thanks
 
@@ -170,6 +171,29 @@ using (padlock.Lock(resourceKey))
     Console.WriteLine("Resource is locked and being accessed");
 }
 ```
+
+## Telemetry
+
+Padlock emits metrics and traces through a `System.Diagnostics.Metrics.Meter` and an `ActivitySource`, both named `Padlock`. It has no dependency on any telemetry SDK or exporter, and emission costs only a few flag checks when nothing is listening. Subscribe from your host to send the data to Prometheus, Tempo, or any OTLP backend:
+
+```csharp
+// Radiant
+settings.Sources.AddMeter(PadlockTelemetry.MeterName);
+settings.Sources.AddActivitySource(PadlockTelemetry.ActivitySourceName);
+
+// OpenTelemetry SDK
+builder.Services.AddOpenTelemetry()
+    .WithMetrics(m => m.AddMeter(PadlockTelemetry.MeterName))
+    .WithTracing(t => t.AddSource(PadlockTelemetry.ActivitySourceName));
+```
+
+Give each instance a stable, low-cardinality `Name` so its series can be told apart (default `"default"`):
+
+```csharp
+Padlock<string> padlock = new Padlock<string>() { Name = "orders" };
+```
+
+You get a lock-wait histogram labeled by outcome (`acquired`, `cancelled`, `error`) and contention, a hold-time histogram, gauges for holders, pending waiters, active keys, `maxCount`, and pool usage, plus a `padlock.acquire` span per acquisition. The span nests under your request span, so a slow trace shows exactly how long it waited on the lock. Keys are never recorded. See [TELEMETRY.md](TELEMETRY.md) for the full catalog, recommended PromQL, and alerts.
 
 ## Performance
 
