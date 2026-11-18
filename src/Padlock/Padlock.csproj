@@ -10,7 +10,7 @@
 		<Title>Padlock is a lightweight, high-performance library that provides key-based locking for multithreaded applications.</Title>
 		<Authors>Joel Christner</Authors>
 		<Description>Padlock is a lightweight, high-performance library that provides key-based locking for multithreaded applications.</Description>
-		<Copyright>(c)2026</Copyright>
+		<Copyright>(c)2026 Joel Christner</Copyright>
 		<PackageProjectUrl>https://github.com/jchristn/padlock</PackageProjectUrl>
 		<PackageIcon>icon.png</PackageIcon>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
@@ -18,11 +18,14 @@
 		<RepositoryType>git</RepositoryType>
 		<PackageTags>lock locks semaphore semaphoreslim async key telemetry opentelemetry metrics tracing</PackageTags>
 		<PackageReleaseNotes>v1.2.1 - Dependency updates for test projects (Touchstone 0.2.0, NUnit 5.0.0, Microsoft.NET.Test.Sdk 18.10.1, coverlet.collector 10.1.0); no library API changes</PackageReleaseNotes>
-		<AssemblyVersion>1.2.1</AssemblyVersion>
-		<Version>1.2.1</Version>
+		<AssemblyVersion>1.2.2</AssemblyVersion>
+		<Version>1.2.2</Version>
 		<PackageLicenseFile>LICENSE.md</PackageLicenseFile>
 		<IncludeSymbols>True</IncludeSymbols>
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+		<ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
 	</PropertyGroup>
 
 	<ItemGroup>
